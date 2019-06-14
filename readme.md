@@ -3,7 +3,9 @@
 
 ## START
 
-`cd example && npm install`
+`cd example && yarn install`
 
-`npm run dev`
+`npm run start`
+
+ 访问：localhost:8088
 
