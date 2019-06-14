@@ -1,8 +1,11 @@
 import LikeReact, { render, Component } from '../../likeReact';
 
+const SubTitle = () => {
+    return <h2>subTitle</h2>
+}
+
 class Title extends Component {
     componentDidMount() {
-        console.log('title');
         console.log(document.getElementById('title'));
     }
 
@@ -22,7 +25,6 @@ class App extends Component {
     }
 
     componentDidMount() {
-        console.log('app');
     }
 
     onIncrease() {
@@ -38,6 +40,7 @@ class App extends Component {
         return (
             <div>
                 <Title>Hello LikeReact!!!!</Title>
+                <SubTitle />
                 <p>
                     <button onClick={this.onDecrease}>-</button>
                     {' '}Counter: {counter}{' '}

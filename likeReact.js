@@ -25,7 +25,10 @@ const setAttribute = (dom, key, value) => {
     }
 };
 
-const render = (vdom, parent=null) => {
+// 将 vdom 转化成 dom
+const _render = (vdom, parent=null) => {
+    // custom component 经过 babel 转义 然后 React.createElement 返回的 vdom.type 类型是 function
+    // <p id="label">title</p> vdom = { type: 'p', props: {id: 'label'}, children: ['title']}
     const mount = parent ? (el => parent.appendChild(el)) : (el => el);
     if (typeof vdom == 'string' || typeof vdom == 'number') {
         return mount(document.createTextNode(vdom));
@@ -35,7 +38,7 @@ const render = (vdom, parent=null) => {
         return Component.render(vdom, parent);
     } else if (typeof vdom == 'object' && typeof vdom.type == 'string') {
         const dom = mount(document.createElement(vdom.type));
-        for (const child of [].concat(...vdom.children)) render(child, dom);
+        for (const child of [].concat(...vdom.children)) _render(child, dom);
         for (const prop in vdom.props) setAttribute(dom, prop, vdom.props[prop]);
         return dom;
     } else {
@@ -43,16 +46,21 @@ const render = (vdom, parent=null) => {
     }
 };
 
-const patch = (dom, vdom, parent=dom.parentNode) => {
+const _patch = (dom, vdom, parent=dom.parentNode) => {
     const replace = parent ? el => (parent.replaceChild(el, dom) && el) : (el => el);
+    // 1. vdom 是自定义组件的时候
+    // 2. vdom 是基本类型时 比较一下 dom
+    // 3. vdom 是 object dom 是文本时 直接替换
+    // 4. vdom 类型和 dom 节点名称不一致时 直接替换
+    // 5. 递归遍历子节点 递归调用 _patch(domChild, vdomChild)
     if (typeof vdom == 'object' && typeof vdom.type == 'function') {
         return Component.patch(dom, vdom, parent);
     } else if (typeof vdom != 'object' && dom instanceof Text) {
-        return dom.textContent != vdom ? replace(render(vdom, parent)) : dom;
+        return dom.textContent != vdom ? replace(_render(vdom, parent)) : dom;
     } else if (typeof vdom == 'object' && dom instanceof Text) {
-        return replace(render(vdom, parent));
+        return replace(_render(vdom, parent));
     } else if (typeof vdom == 'object' && dom.nodeName != vdom.type.toUpperCase()) {
-        return replace(render(vdom, parent));
+        return replace(_render(vdom, parent));
     } else if (typeof vdom == 'object' && dom.nodeName == vdom.type.toUpperCase()) {
         const pool = {};
         const active = document.activeElement;
@@ -62,7 +70,7 @@ const patch = (dom, vdom, parent=dom.parentNode) => {
         });
         [].concat(...vdom.children).map((child, index) => {
             const key = child.props && child.props.key || `__index_${index}`;
-            dom.appendChild(pool[key] ? patch(pool[key], child) : render(child, dom));
+            dom.appendChild(pool[key] ? _patch(pool[key], child) : _render(child, dom));
             delete pool[key];
         });
         for (const key in pool) {
@@ -83,32 +91,41 @@ class Component {
         this.state = null;
     }
 
+    // 类似 ReactDOM.render()
     static render(vdom, parent=null) {
         const props = Object.assign({}, vdom.props, {children: vdom.children});
+
+        // 判断这个组件是函数组件还是类组件
         if (Component.isPrototypeOf(vdom.type)) {
             const instance = new (vdom.type)(props);
             instance.componentWillMount();
-            instance.base = render(instance.render(), parent);
+
+            // 调用业务组件中的 render 方法
+            instance.base = _render(instance.render(), parent);
             instance.base.__likeReactInstance = instance;
+
+            // key 的作用
             instance.base.__likeReactKey = vdom.props.key;
             instance.componentDidMount();
             return instance.base;
         } else {
-            return render(vdom.type(props), parent);
+            return _render(vdom.type(props), parent);
         }
     }
 
     static patch(dom, vdom, parent=dom.parentNode) {
         const props = Object.assign({}, vdom.props, {children: vdom.children});
+        // dom 是类组件时 会调用类组件特有的生命周期方法
         if (dom.__likeReactInstance && dom.__likeReactInstance.constructor == vdom.type) {
             dom.__likeReactInstance.componentWillReceiveProps(props);
             dom.__likeReactInstance.props = props;
-            return patch(dom, dom.__likeReactInstance.render(), parent);
+            return _patch(dom, dom.__likeReactInstance.render(), parent);
         } else if (Component.isPrototypeOf(vdom.type)) {
+            // 全新的组件，不是更新的组件
             const ndom = Component.render(vdom, parent);
             return parent ? (parent.replaceChild(ndom, dom) && ndom) : (ndom);
         } else if (!Component.isPrototypeOf(vdom.type)) {
-            return patch(dom, vdom.type(props), parent);
+            return _patch(dom, vdom.type(props), parent);
         }
     }
 
@@ -117,8 +134,10 @@ class Component {
         if (this.base && this.shouldComponentUpdate(this.props, next)) {
             const prevState = this.state;
             this.componentWillUpdate(this.props, next);
+            // 更新 state
             this.state = compat(next) ? Object.assign({}, this.state, next) : next;
-            patch(this.base, this.render());
+            // 更新 dom (感觉这个实现方式操作 dom 也是很频繁)
+            _patch(this.base, this.render());
             this.componentDidUpdate(this.props, prevState);
         } else {
             this.state = compat(next) ? Object.assign({}, this.state, next) : next;
@@ -154,6 +173,6 @@ class Component {
     }
 };
 
-if (typeof module != 'undefined') module.exports = {createElement, render, Component};
-if (typeof module == 'undefined') window.likeReact  = {createElement, render, Component};
+if (typeof module != 'undefined') module.exports = {createElement, render: _render, Component};
+if (typeof module == 'undefined') window.likeReact  = {createElement, render: _render, Component};
 })();
