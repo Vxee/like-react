@@ -28,6 +28,8 @@ module.exports = {
     host: 'localhost', // 服务器的ip地址 希望服务器外可以访问就设置 0.0.0.0
     port: 8088, // 端口
     open: true, // 自动打开页面
+    contentBase: path.join(__dirname, 'dist'),
+    compress: true,
   },
   plugins: [
     new CleanWebpackPlugin(),
